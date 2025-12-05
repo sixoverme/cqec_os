@@ -66,8 +66,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     if (error) {
       console.error('Error fetching profile:', error);
-    } else if (data) {
-      // Map DB profile to AppUser
+      setProfile(null); // Ensure profile is null on error
+      setLoading(false);
+      return;
+    }
+
+    if (data) {
       const appUser: AppUser = {
         id: data.id,
         name: data.name,
@@ -81,7 +85,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isRobot: data.is_robot,
         color: data.color
       };
-      setProfile(appUser);
+
+      // Only update profile state if it has truly changed to prevent unnecessary re-renders
+      if (!profile || JSON.stringify(profile) !== JSON.stringify(appUser)) {
+        setProfile(appUser);
+      }
+    } else {
+        setProfile(null);
     }
     setLoading(false);
   };
