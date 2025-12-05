@@ -14,19 +14,27 @@ import { useSupabaseData } from './hooks/useSupabaseData';
 import { supabase } from './lib/supabase';
 
 const Login: React.FC = () => {
-    const { signIn } = useAuth();
+    const { signIn, signUp } = useAuth();
     const [email, setEmail] = useState('');
+    const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [msg, setMsg] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
+        setMsg('');
         try {
-            await signIn(email);
+            if (isSignUp) {
+                await signUp(email);
+                setMsg('Check your email for the confirmation link!');
+            } else {
+                await signIn(email);
+            }
         } catch (err: any) {
-            setError(err.message || 'Login failed');
+            setError(err.message || 'Authentication failed');
         } finally {
             setLoading(false);
         }
@@ -36,7 +44,9 @@ const Login: React.FC = () => {
         <div className="flex items-center justify-center h-screen bg-slate-100">
             <div className="bg-white p-8 rounded shadow-md w-96">
                 <h1 className="text-2xl font-bold mb-4 text-slate-800">CQEC OS Login</h1>
-                <p className="text-sm text-slate-500 mb-4">Enter your email to sign in.</p>
+                <p className="text-sm text-slate-500 mb-4">
+                    {isSignUp ? 'Create a new account.' : 'Enter your email to sign in.'}
+                </p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700">Email</label>
@@ -50,16 +60,26 @@ const Login: React.FC = () => {
                         />
                     </div>
                     {error && <div className="text-red-500 text-sm">{error}</div>}
+                    {msg && <div className="text-green-500 text-sm">{msg}</div>}
                     <button 
                         type="submit" 
                         disabled={loading}
                         className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 disabled:opacity-50"
                     >
-                        {loading ? 'Signing in...' : 'Sign In'}
+                        {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
                     </button>
                 </form>
+                <div className="mt-4 text-sm text-center">
+                    <button 
+                        type="button"
+                        onClick={() => { setIsSignUp(!isSignUp); setError(''); setMsg(''); }}
+                        className="text-purple-600 hover:underline"
+                    >
+                        {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+                    </button>
+                </div>
                 <div className="mt-4 text-xs text-gray-400 text-center">
-                    Dev Hint: Try 'you@cqec.org' or 'alice@cqec.org' (Password: password)
+                    Dev Hint: Default password is 'password'
                 </div>
             </div>
         </div>

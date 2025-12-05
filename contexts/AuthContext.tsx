@@ -10,6 +10,7 @@ interface AuthContextType {
   profile: AppUser | null;
   loading: boolean;
   signIn: (email: string) => Promise<void>;
+  signUp: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   signIn: async () => {},
+  signUp: async () => {},
   signOut: async () => {},
 });
 
@@ -89,6 +91,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: 'password',
+    });
+    if (error) throw error;
+  };
+
+  const signUp = async (email: string) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password: 'password', // Default password
+      options: {
+        data: {
+          full_name: email.split('@')[0], // Default name from email
+          avatar_url: `https://api.dicebear.com/9.x/avataaars/svg?seed=${email}`
+        }
+      }
     });
     if (error) throw error;
   };
