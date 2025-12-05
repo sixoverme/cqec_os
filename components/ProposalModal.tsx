@@ -54,7 +54,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({
   const [data, setData] = useState<ProposalData>({
     type: initialMode,
     title: '',
-    domainId: initialParentId || sortedDomains[0]?.domain.id || '',
+    domainId: initialParentId || sortedDomains[0]?.domain.id || null,
     aims: '',
     problem: '',
     action: '',
