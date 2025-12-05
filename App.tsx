@@ -572,14 +572,161 @@ const App: React.FC = () => {
     supabase.from('waves').update({ tags: newTags }).eq('id', selectedWave.id).then();
   };
 
-  const handleVoteGadget = (blipId: string, gadgetId: string, optionId: string) => {
-      // Complex JSON update. 
-      // For now, optimistic update only. Syncing specific array items in JSONB via Supabase is hard without RPC or full object replacement.
-      // We'd need to fetch the blip, update JSON, save back.
+  const handleVoteGadget = async (blipId: string, gadgetId: string, optionId: string) => {
+    if (!selectedWave || !currentUser) return;
+
+    // --- Local State Update (Optimistic) ---
+    setWaves(prev => prev.map(w => {
+      if (w.id === selectedWave.id) {
+        return {
+          ...w,
+          rootBlip: updateBlipInTree(w.rootBlip, blipId, (b) => ({
+             ...b,
+             gadgets: b.gadgets?.map(g => {
+               if (g.id === gadgetId && g.type === 'poll') {
+                 const isVoted = g.data.options?.find(o => o.id === optionId)?.voterIds.includes(currentUser.id);
+                 return {
+                   ...g,
+                   data: {
+                     ...g.data,
+                     options: g.data.options?.map(o => {
+                       let newVoters = o.voterIds.filter(id => id !== currentUser.id);
+                       if (o.id === optionId && !isVoted) newVoters.push(currentUser.id);
+                       return { ...o, voterIds: newVoters };
+                     })
+                   }
+                 };
+               }
+               return g;
+             })
+          }))
+        };
+      }
+      return w;
+    }));
+
+    // --- Supabase Update ---
+    try {
+        const { data: blipData, error: fetchError } = await supabase
+            .from('blips')
+            .select('gadgets')
+            .eq('id', blipId)
+            .single();
+
+        if (fetchError || !blipData) {
+            throw fetchError || new Error('Blip not found');
+        }
+
+        const currentGadgets = (blipData.gadgets || []) as Gadget[];
+        const updatedGadgets = currentGadgets.map(g => {
+            if (g.id === gadgetId && g.type === 'poll') {
+                const isVoted = g.data.options?.find(o => o.id === optionId)?.voterIds.includes(currentUser.id);
+                return {
+                    ...g,
+                    data: {
+                        ...g.data,
+                        options: g.data.options?.map(o => {
+                            let newVoters = o.voterIds.filter(id => id !== currentUser.id);
+                            if (o.id === optionId && !isVoted) newVoters.push(currentUser.id);
+                            return { ...o, voterIds: newVoters };
+                        })
+                    }
+                };
+            }
+            return g;
+        });
+
+        const { error: updateError } = await supabase
+            .from('blips')
+            .update({ gadgets: updatedGadgets })
+            .eq('id', blipId);
+
+        if (updateError) throw updateError;
+        
+        await refresh(); 
+
+    } catch (e) {
+        console.error("Error updating gadget vote:", e);
+    }
   };
 
-  const handleConsentVote = (blipId: string, gadgetId: string, voteType: 'consent' | 'concern' | 'objection') => {
-      // Same as above. Full object replacement needed.
+  const handleConsentVote = async (blipId: string, gadgetId: string, voteType: 'consent' | 'concern' | 'objection') => {
+      if (!selectedWave || !currentUser) return;
+
+      // --- Local State Update (Optimistic) ---
+      setWaves(prev => prev.map(w => {
+          if (w.id === selectedWave.id) {
+              return {
+                  ...w,
+                  rootBlip: updateBlipInTree(w.rootBlip, blipId, (b) => ({
+                      ...b,
+                      gadgets: b.gadgets?.map(g => {
+                          if (g.id === gadgetId && g.type === 'consent') {
+                              const votes = g.data.votes || [];
+                              const existingVoteIndex = votes.findIndex(v => v.userId === currentUser.id);
+                              const newVotes = [...votes];
+                              
+                              if (existingVoteIndex >= 0) {
+                                  newVotes[existingVoteIndex] = { userId: currentUser.id, type: voteType };
+                              } else {
+                                  newVotes.push({ userId: currentUser.id, type: voteType });
+                              }
+
+                              return {
+                                  ...g,
+                                  data: { ...g.data, votes: newVotes }
+                              };
+                          }
+                          return g;
+                      })
+                  }))
+              };
+          }
+          return w;
+      }));
+
+      // --- Supabase Update ---
+      try {
+          // Fetch the current blip from DB to get latest gadgets
+          const { data: blipData, error: fetchError } = await supabase
+              .from('blips')
+              .select('gadgets')
+              .eq('id', blipId)
+              .single();
+
+          if (fetchError || !blipData) {
+              throw fetchError || new Error('Blip not found');
+          }
+
+          const currentGadgets = (blipData.gadgets || []) as Gadget[];
+          const updatedGadgets = currentGadgets.map(g => {
+              if (g.id === gadgetId && g.type === 'consent') {
+                  const votes = g.data.votes || [];
+                  const existingVoteIndex = votes.findIndex(v => v.userId === currentUser.id);
+                  const newVotes = [...votes];
+                  
+                  if (existingVoteIndex >= 0) {
+                      newVotes[existingVoteIndex] = { userId: currentUser.id, type: voteType };
+                  } else {
+                      newVotes.push({ userId: currentUser.id, type: voteType });
+                  }
+                  return { ...g, data: { ...g.data, votes: newVotes } };
+              }
+              return g;
+          });
+
+          const { error: updateError } = await supabase
+              .from('blips')
+              .update({ gadgets: updatedGadgets })
+              .eq('id', blipId);
+
+          if (updateError) throw updateError;
+          
+          await refresh(); // Refresh data from Supabase to ensure UI consistency
+      } catch (e) {
+          console.error("Error updating consent vote:", e);
+          // TODO: Implement rollback for optimistic update if needed
+      }
   };
 
   const handleUpdateProfile = (updatedUser: User) => {
