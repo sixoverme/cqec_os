@@ -855,6 +855,7 @@ const App: React.FC = () => {
             onExecuteProposal={handleExecuteProposal}
             onTogglePin={() => handleTogglePin(selectedWave.id)}
             onToggleBlipLock={handleToggleBlipLock}
+            onConsentVote={handleConsentVote} // Pass the handler
           />
         )}
 

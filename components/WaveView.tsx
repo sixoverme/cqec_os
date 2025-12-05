@@ -30,6 +30,7 @@ interface WaveViewProps {
   onExecuteProposal?: (waveId: string) => void; // NEW: Callback to execute proposal
   onTogglePin: () => void; // NEW: Callback to toggle pin state
   onToggleBlipLock: (blipId: string) => void; // NEW: Toggle lock
+  onConsentVote: (blipId: string, gadgetId: string, voteType: 'consent' | 'concern' | 'objection') => void; // NEW: Consent vote
 }
 
 const WaveView: React.FC<WaveViewProps> = ({ 
@@ -55,7 +56,8 @@ const WaveView: React.FC<WaveViewProps> = ({
   onViewProfile,
   onExecuteProposal,
   onTogglePin,
-  onToggleBlipLock
+  onToggleBlipLock,
+  onConsentVote // Destructure here
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [playbackMode, setPlaybackMode] = useState(false);
@@ -401,6 +403,7 @@ const WaveView: React.FC<WaveViewProps> = ({
             onVoteGadget={onVoteGadget}
             onViewProfile={onViewProfile}
             onToggleBlipLock={onToggleBlipLock}
+            onConsentVote={onConsentVote} // Pass onConsentVote here
             isDM={wave.isDM}
           />
           
