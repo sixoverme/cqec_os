@@ -307,6 +307,11 @@ const App: React.FC = () => {
         color: newDomain.color,
         description: newDomain.description,
         parent_id: parentId
+    }).then(({ error }) => {
+        if (error) {
+            console.error('Error inserting new domain:', error);
+            alert(`Failed to create circle: ${error.message}`); // Provide user feedback
+        }
     });
 
     return newId;
