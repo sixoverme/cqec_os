@@ -122,108 +122,114 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
 
   // --- Realtime Subscriptions ---
   useEffect(() => {
-    if (!currentUserProfile) return;
+    if (!currentUserProfile) {
+      console.log('Realtime: currentUserProfile not available, skipping subscriptions.');
+      return;
+    }
 
+    console.log('Realtime: Attempting to subscribe to channels for user:', currentUserProfile.id);
     const subscriptions: any[] = [];
 
-    // Profiles
-    const profilesChannel = supabase.channel('public:profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
-        setUsers(prevUsers => {
-          const newUsers = { ...prevUsers };
-          const p = payload.new || payload.old;
-          const user: User = {
-              id: p.id, name: p.name, handle: p.handle, email: p.email, avatar: p.avatar_url,
-              bio: p.bio, status: p.status, capacity: p.capacity, accessNeeds: p.access_needs,
-              isRobot: p.is_robot, color: p.color
-          };
+    const subscribeToChannel = (channelName: string, table: string, handler: (payload: any) => void) => {
+        const channel = supabase.channel(channelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table: table }, payload => {
+                console.log(`Realtime: Event on ${table} received. Event Type: ${payload.eventType}, Data:`, payload.new || payload.old);
+                handler(payload);
+            })
+            .on('channel_state', (state) => {
+                console.log(`Realtime: Channel '${channelName}' state:`, state);
+            })
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Realtime: Successfully SUBSCRIBED to channel '${channelName}' for table '${table}'.`);
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error(`Realtime: Error in channel '${channelName}' for table '${table}':`, err);
+                } else if (status === 'CLOSED') {
+                    console.log(`Realtime: Channel '${channelName}' for table '${table}' CLOSED.`);
+                }
+            });
+        subscriptions.push(channel);
+    };
 
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            newUsers[user.id] = user;
-          } else if (payload.eventType === 'DELETE') {
-            delete newUsers[user.id];
-          }
-          return newUsers;
+    // Profiles
+    subscribeToChannel('public:profiles', 'profiles', payload => {
+        setUsers(prevUsers => {
+            const newUsers = { ...prevUsers };
+            const p = payload.new || payload.old;
+            const user: User = {
+                id: p.id, name: p.name, handle: p.handle, email: p.email, avatar: p.avatar_url,
+                bio: p.bio, status: p.status, capacity: p.capacity, accessNeeds: p.access_needs,
+                isRobot: p.is_robot, color: p.color
+            };
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                newUsers[user.id] = user;
+            } else if (payload.eventType === 'DELETE') {
+                delete newUsers[user.id];
+            }
+            return newUsers;
         });
-      })
-      .subscribe();
-    subscriptions.push(profilesChannel);
+    });
 
     // Domains
-    const domainsChannel = supabase.channel('public:domains')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'domains' }, payload => {
+    subscribeToChannel('public:domains', 'domains', payload => {
         setDomains(prevDomains => {
-          const newDomains = [...prevDomains];
-          const d = payload.new || payload.old;
-          const domain: Domain = {
-              id: d.id, name: d.name, color: d.color, description: d.description, parentId: d.parent_id
-          };
-
-          if (payload.eventType === 'INSERT') {
-            newDomains.push(domain);
-          } else if (payload.eventType === 'UPDATE') {
-            const index = newDomains.findIndex(dm => dm.id === domain.id);
-            if (index !== -1) newDomains[index] = domain;
-          } else if (payload.eventType === 'DELETE') {
-            return newDomains.filter(dm => dm.id !== domain.id);
-          }
-          return newDomains;
+            const newDomains = [...prevDomains];
+            const d = payload.new || payload.old;
+            const domain: Domain = {
+                id: d.id, name: d.name, color: d.color, description: d.description, parentId: d.parent_id
+            };
+            if (payload.eventType === 'INSERT') {
+                newDomains.push(domain);
+            } else if (payload.eventType === 'UPDATE') {
+                const index = newDomains.findIndex(dm => dm.id === domain.id);
+                if (index !== -1) newDomains[index] = domain;
+            } else if (payload.eventType === 'DELETE') {
+                return newDomains.filter(dm => dm.id !== domain.id);
+            }
+            return newDomains;
         });
-      })
-      .subscribe();
-    subscriptions.push(domainsChannel);
+    });
 
     // Roles
-    const rolesChannel = supabase.channel('public:roles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'roles' }, payload => {
+    subscribeToChannel('public:roles', 'roles', payload => {
         setRoles(prevRoles => {
-          const newRoles = [...prevRoles];
-          const r = payload.new || payload.old;
-          const role: Role = {
-              id: r.id, name: r.name, domainId: r.domain_id, description: r.description,
-              holderIds: r.holder_ids || [], termEnd: r.term_end
-          };
-
-          if (payload.eventType === 'INSERT') {
-            newRoles.push(role);
-          } else if (payload.eventType === 'UPDATE') {
-            const index = newRoles.findIndex(rl => rl.id === role.id);
-            if (index !== -1) newRoles[index] = role;
-          } else if (payload.eventType === 'DELETE') {
-            return newRoles.filter(rl => rl.id !== role.id);
-          }
-          return newRoles;
+            const newRoles = [...prevRoles];
+            const r = payload.new || payload.old;
+            const role: Role = {
+                id: r.id, name: r.name, domainId: r.domain_id, description: r.description,
+                holderIds: r.holder_ids || [], termEnd: r.term_end
+            };
+            if (payload.eventType === 'INSERT') {
+                newRoles.push(role);
+            } else if (payload.eventType === 'UPDATE') {
+                const index = newRoles.findIndex(rl => rl.id === role.id);
+                if (index !== -1) newRoles[index] = role;
+            } else if (payload.eventType === 'DELETE') {
+                return newRoles.filter(rl => rl.id !== role.id);
+            }
+            return newRoles;
         });
-      })
-      .subscribe();
-    subscriptions.push(rolesChannel);
+    });
 
-    // Waves and Blips (More complex due to tree structure)
-    // For simplicity, we'll re-fetch affected wave data when a blip or wave changes
-    // A more optimized approach would be to update the tree directly without re-fetching all blips for a wave.
-    const wavesBlipsChannel = supabase.channel('public:waves_blips_participants')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waves' }, async payload => {
-        // For wave changes, re-fetch all data related to waves
-        console.log("Realtime: Wave change detected. Re-fetching waves data.");
-        fetchData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'blips' }, async payload => {
-        // For blip changes, re-fetch all data related to waves
-        console.log("Realtime: Blip change detected. Re-fetching waves data.");
-        fetchData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wave_participants' }, async payload => {
-        // For participant changes, re-fetch all data related to waves
-        console.log("Realtime: Wave Participant change detected. Re-fetching waves data.");
-        fetchData();
-      })
-      .subscribe();
-    subscriptions.push(wavesBlipsChannel);
+    // Waves, Blips, Participants - re-fetch strategy
+    subscribeToChannel('public:waves', 'waves', async payload => {
+        console.log("Realtime: Wave change detected. Triggering full waves data re-fetch.");
+        await fetchData();
+    });
+    subscribeToChannel('public:blips', 'blips', async payload => {
+        console.log("Realtime: Blip change detected. Triggering full waves data re-fetch.");
+        await fetchData();
+    });
+    subscribeToChannel('public:wave_participants', 'wave_participants', async payload => {
+        console.log("Realtime: Wave Participant change detected. Triggering full waves data re-fetch.");
+        await fetchData();
+    });
 
     return () => {
+      console.log('Realtime: Unsubscribing from channels.');
       subscriptions.forEach(sub => supabase.removeChannel(sub));
     };
-  }, [currentUserProfile, fetchData]); // Depend on fetchData and currentUserProfile
+  }, [currentUserProfile, fetchData]);
 
   return { waves, domains, roles, users, loading, refresh: fetchData };
 };
