@@ -96,17 +96,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUp = async (email: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password: 'password', // Default password
-      options: {
-        data: {
-          full_name: email.split('@')[0], // Default name from email
-          avatar_url: `https://api.dicebear.com/9.x/avataaars/svg?seed=${email}`
+    console.log('Attempting to sign up:', email);
+    if (!supabase || !supabase.auth) {
+      console.error('Supabase client is not initialized correctly', supabase);
+      throw new Error('Supabase client not ready');
+    }
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: 'password',
+        options: {
+          data: {
+            full_name: email.split('@')[0],
+            avatar_url: `https://api.dicebear.com/9.x/avataaars/svg?seed=${email}`
+          }
         }
+      });
+      if (error) {
+        console.error('Supabase signUp error:', error);
+        throw error;
       }
-    });
-    if (error) throw error;
+      console.log('Sign up successful:', data);
+    } catch (err: any) {
+      console.error('Unexpected error during signUp:', err);
+      throw err;
+    }
   };
 
   const signOut = async () => {
