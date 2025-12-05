@@ -1,0 +1,1 @@
+alter table waves add column tags text[] default '{}'::text[];
