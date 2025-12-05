@@ -492,7 +492,9 @@ const App: React.FC = () => {
 
         // Update Title if needed
         if (newTitle !== w.title) {
-            supabase.from('waves').update({ title: newTitle }).eq('id', w.id).then();
+            supabase.from('waves').update({ title: newTitle }).eq('id', w.id).then(({error}) => {
+                if (error) console.error("Error updating wave title:", error);
+            });
         }
 
         // Update Blip
@@ -502,7 +504,12 @@ const App: React.FC = () => {
             gadgets: mergedGadgets.length > 0 ? mergedGadgets : null, // merge logic needed?
             last_edited: Date.now(),
             last_editor_id: currentUser.id
-        }).eq('id', blipId).then();
+        }).eq('id', blipId).then(({error}) => {
+            if (error) {
+                console.error("Error updating blip:", error);
+                alert(`Failed to edit blip: ${error.message}`); // User feedback
+            }
+        });
 
         return {
           ...w,
