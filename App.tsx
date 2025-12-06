@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Wave, AppState, Blip, Gadget, RemoteCursor, User, Domain, Role, ProposalMetadata } from './types';
-import { updateBlipInTree, addChildToBlip, deleteBlipFromTree, generateId } from './utils';
+import { updateBlipInTree, addChildToBlip, deleteBlipFromTree, generateId, findBlipInTree } from './utils';
 import WaveList from './components/WaveList';
 import WaveView from './components/WaveView';
 import ProfileView from './components/ProfileView';
@@ -119,6 +119,9 @@ const App: React.FC = () => {
   // Track optimistically created BLIPS to prevent them from disappearing
   // Map: waveId -> Set<blipId>
   const pendingBlips = useRef<Map<string, Set<string>>>(new Map());
+  
+  // Track optimistically DELETED blips to prevent them from reappearing briefly
+  const pendingDeletes = useRef<Set<string>>(new Set());
 
   // Sync Remote Data to Local State
   useEffect(() => {
@@ -129,14 +132,15 @@ const App: React.FC = () => {
 
       if (remoteWaves.length > 0 || !dataLoading) {
           setWaves(prevWaves => {
-              const nextWaves = [...remoteWaves];
+              let nextWaves = [...remoteWaves];
               
-              // 1. Handle Pending Waves (as before)
+              // 1. Handle Pending Waves
               Array.from(pendingWaveIds.current).forEach(id => {
                    const isInRemote = remoteWaves.some(r => r.id === id);
                    if (isInRemote) {
                        pendingWaveIds.current.delete(id);
-                   } else {
+                   }
+                   else {
                        const localWave = prevWaves.find(w => w.id === id);
                        if (localWave && !nextWaves.some(n => n.id === id)) {
                            nextWaves.unshift(localWave);
@@ -145,7 +149,6 @@ const App: React.FC = () => {
               });
 
               // 2. Handle Pending Blips
-              // Iterate through waves that have pending blips
               pendingBlips.current.forEach((blipIds, waveId) => {
                   const remoteWave = nextWaves.find(w => w.id === waveId);
                   const localWave = prevWaves.find(w => w.id === waveId);
@@ -155,7 +158,6 @@ const App: React.FC = () => {
                       const missingBlipIds = new Set<string>();
 
                       blipIds.forEach(blipId => {
-                          // Check if blip exists in remote tree
                           if (findBlipInTree(remoteWave.rootBlip, blipId)) {
                               // It exists!
                           } else {
@@ -164,13 +166,10 @@ const App: React.FC = () => {
                           }
                       });
                       
-                      // Remove found blips from pending set
                       blipIds.forEach(id => {
                           if (!missingBlipIds.has(id)) blipIds.delete(id);
                       });
 
-                      // If any pending blip is missing, we MUST keep the local wave
-                      // to prevent the UI from flashing (disappearing blip).
                       if (!allFound) {
                           const index = nextWaves.findIndex(w => w.id === waveId);
                           if (index !== -1) {
@@ -181,11 +180,98 @@ const App: React.FC = () => {
                       if (blipIds.size === 0) pendingBlips.current.delete(waveId);
                   }
               });
+
+              // 3. Handle Pending Deletes
+              // If a blip is pending delete, ensure it stays deleted in the view
+              if (pendingDeletes.current.size > 0) {
+                  nextWaves = nextWaves.map(wave => {
+                      // If any pending delete is in this wave's tree, we need to hide it (set deletedAt)
+                      // We traverse the tree and clone it with updates if needed.
+                      // Since `deleteBlipFromTree` removes it, we can use that.
+                      // But wait, for soft delete stability, we rely on `deletedAt`.
+                      // If the remote data comes back with `deletedAt: null`, we override it.
+                      // Actually, `useSupabaseData` filters based on `deletedAt`? No, it includes them.
+                      // `Blip.tsx` hides them if `deletedAt` is set.
+                      
+                      let waveNeedsUpdate = false;
+                      // Check if this wave contains any pending deletes that are NOT yet deleted in remote
+                      // Optimization: only check if we know the blip belongs to this wave? 
+                      // We don't know which wave a blip belongs to easily here.
+                      // We just traverse.
+                      
+                      const updateTreeWithPendingDeletes = (root: Blip): Blip => {
+                          let newRoot = { ...root };
+                          let childrenChanged = false;
+                          
+                          // If this blip is pending delete and doesn't have deletedAt yet
+                          if (pendingDeletes.current.has(root.id) && !root.deletedAt) {
+                              newRoot.deletedAt = Date.now(); // Force it to be "deleted"
+                              waveNeedsUpdate = true;
+                              // Check if we can remove it from pending? 
+                              // Only if remote *actually* has it deleted. Here we are patching stale remote.
+                          } else if (pendingDeletes.current.has(root.id) && root.deletedAt) {
+                              // Remote has confirmed delete!
+                              pendingDeletes.current.delete(root.id);
+                          }
+
+                          const newChildren = root.children.map(updateTreeWithPendingDeletes);
+                          // Deep check for changes? `updateTreeWithPendingDeletes` returns new object.
+                          // Logic above mutates `newRoot` or returns copy?
+                          // Let's make it pure.
+                          
+                          if (waveNeedsUpdate) {
+                              // If we flagged it, `newRoot` has the change.
+                          }
+                          
+                          newRoot.children = newChildren;
+                          return newRoot;
+                      };
+                      
+                      // Actually, simpler: If we have pending deletes, just apply `deleteBlipFromTree` logic
+                      // or set `deletedAt` on the relevant nodes in the tree.
+                      // Since `Blip` component hides based on `deletedAt`, let's just inject `deletedAt`.
+                      
+                      // Check if any pending delete is in this wave
+                      let found = false;
+                      pendingDeletes.current.forEach(id => {
+                          if (findBlipInTree(wave.rootBlip, id)) found = true;
+                      });
+                      
+                      if (found) {
+                          const newRoot = updateBlipInTree(wave.rootBlip, wave.rootBlip.id, (b) => {
+                              // This is a hacky way to traverse. `updateBlipInTree` targets ONE id.
+                              // We need to target multiple.
+                              // Let's write a specific recursive mapper.
+                              return b; // Placeholder
+                          });
+                          
+                          // Re-implement traversal:
+                          const applyDeletes = (node: Blip): Blip => {
+                              const shouldDelete = pendingDeletes.current.has(node.id);
+                              const remoteDeleted = !!node.deletedAt;
+                              
+                              if (shouldDelete && remoteDeleted) {
+                                  pendingDeletes.current.delete(node.id);
+                              }
+                              
+                              return {
+                                  ...node,
+                                  deletedAt: (shouldDelete && !remoteDeleted) ? Date.now() : node.deletedAt,
+                                  children: node.children.map(applyDeletes)
+                              };
+                          };
+                          
+                          return { ...wave, rootBlip: applyDeletes(wave.rootBlip) };
+                      }
+                      
+                      return wave;
+                  });
+              }
               
               return nextWaves;
           });
       }
-  }, [remoteWaves, remoteDomains, remoteRoles, remoteUsers, profile, dataLoading]); // Add selectedWaveId to dependencies
+  }, [remoteWaves, remoteDomains, remoteRoles, remoteUsers, profile, dataLoading]);
 
   const selectedWave = waves.find(w => w.id === selectedWaveId);
 
@@ -629,6 +715,7 @@ const App: React.FC = () => {
     // Soft Delete: We update the tree to remove it from view, 
     // BUT we must ensure Supabase keeps the record with `deleted_at`.
     // For local state (live view), we remove it so it disappears immediately.
+    pendingDeletes.current.add(blipId); // Track pending delete
     setWaves(prev => prev.map(w => w.id === selectedWave.id ? { ...w, rootBlip: deleteBlipFromTree(w.rootBlip, blipId) || w.rootBlip } : w));
     
     // Supabase Soft Delete
