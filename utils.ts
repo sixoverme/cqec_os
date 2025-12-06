@@ -1,6 +1,16 @@
 
 import { Blip, RemoteCursor, User } from './types';
 
+// Recursively find a blip in the tree
+export const findBlipInTree = (root: Blip, targetId: string): Blip | null => {
+  if (root.id === targetId) return root;
+  for (const child of root.children) {
+    const found = findBlipInTree(child, targetId);
+    if (found) return found;
+  }
+  return null;
+};
+
 // Recursively find a blip and update it, or add a child to it
 export const updateBlipInTree = (root: Blip, targetId: string, updateFn: (b: Blip) => Blip): Blip => {
   if (root.id === targetId) {

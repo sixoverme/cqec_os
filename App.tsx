@@ -115,6 +115,10 @@ const App: React.FC = () => {
   
   // Track optimistically created waves to prevent them from disappearing during race conditions
   const pendingWaveIds = useRef<Set<string>>(new Set());
+  
+  // Track optimistically created BLIPS to prevent them from disappearing
+  // Map: waveId -> Set<blipId>
+  const pendingBlips = useRef<Map<string, Set<string>>>(new Map());
 
   // Sync Remote Data to Local State
   useEffect(() => {
@@ -127,22 +131,55 @@ const App: React.FC = () => {
           setWaves(prevWaves => {
               const nextWaves = [...remoteWaves];
               
-              // Check pending waves
+              // 1. Handle Pending Waves (as before)
               Array.from(pendingWaveIds.current).forEach(id => {
                    const isInRemote = remoteWaves.some(r => r.id === id);
                    if (isInRemote) {
-                       // It has arrived! Stop tracking.
                        pendingWaveIds.current.delete(id);
                    } else {
-                       // Not in remote yet. Keep it from local state.
                        const localWave = prevWaves.find(w => w.id === id);
-                       if (localWave) {
-                           // Add to top of list if not present
-                           if (!nextWaves.some(n => n.id === id)) {
-                               nextWaves.unshift(localWave);
-                           }
+                       if (localWave && !nextWaves.some(n => n.id === id)) {
+                           nextWaves.unshift(localWave);
                        }
                    }
+              });
+
+              // 2. Handle Pending Blips
+              // Iterate through waves that have pending blips
+              pendingBlips.current.forEach((blipIds, waveId) => {
+                  const remoteWave = nextWaves.find(w => w.id === waveId);
+                  const localWave = prevWaves.find(w => w.id === waveId);
+
+                  if (remoteWave && localWave) {
+                      let allFound = true;
+                      const missingBlipIds = new Set<string>();
+
+                      blipIds.forEach(blipId => {
+                          // Check if blip exists in remote tree
+                          if (findBlipInTree(remoteWave.rootBlip, blipId)) {
+                              // It exists!
+                          } else {
+                              allFound = false;
+                              missingBlipIds.add(blipId);
+                          }
+                      });
+                      
+                      // Remove found blips from pending set
+                      blipIds.forEach(id => {
+                          if (!missingBlipIds.has(id)) blipIds.delete(id);
+                      });
+
+                      // If any pending blip is missing, we MUST keep the local wave
+                      // to prevent the UI from flashing (disappearing blip).
+                      if (!allFound) {
+                          const index = nextWaves.findIndex(w => w.id === waveId);
+                          if (index !== -1) {
+                              nextWaves[index] = localWave;
+                          }
+                      }
+
+                      if (blipIds.size === 0) pendingBlips.current.delete(waveId);
+                  }
               });
               
               return nextWaves;
@@ -487,6 +524,12 @@ const App: React.FC = () => {
       children: [],
       gadgets: gadgets.length > 0 ? gadgets : undefined
     };
+
+    // Optimistic Update
+    // Track pending blip
+    const currentPendingBlips = pendingBlips.current.get(selectedWave.id) || new Set();
+    currentPendingBlips.add(newBlipId);
+    pendingBlips.current.set(selectedWave.id, currentPendingBlips);
 
     setWaves(waves.map(w => w.id === selectedWave.id ? {
         ...w,
