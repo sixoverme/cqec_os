@@ -110,6 +110,7 @@ const App: React.FC = () => {
       parentId?: string;
   }>({ isOpen: false });
   
+  const [view, setView] = useState<AppState['view']>('wave');
   const [profileTargetId, setProfileTargetId] = useState<string | null>(null);
   
   // Track optimistically created waves to prevent them from disappearing during race conditions
