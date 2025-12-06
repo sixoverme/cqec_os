@@ -110,17 +110,44 @@ const App: React.FC = () => {
       parentId?: string;
   }>({ isOpen: false });
   
-  const [view, setView] = useState<AppState['view']>('wave');
   const [profileTargetId, setProfileTargetId] = useState<string | null>(null);
+  
+  // Track optimistically created waves to prevent them from disappearing during race conditions
+  const pendingWaveIds = useRef<Set<string>>(new Set());
 
   // Sync Remote Data to Local State
   useEffect(() => {
-      if (remoteWaves.length > 0 || !dataLoading) setWaves(remoteWaves);
       if (remoteDomains.length > 0 || !dataLoading) setDomains(remoteDomains);
       if (remoteRoles.length > 0 || !dataLoading) setRoles(remoteRoles);
       if (Object.keys(remoteUsers).length > 0 || !dataLoading) setUsers(remoteUsers);
       if (profile) setCurrentUser(profile);
-  }, [remoteWaves, remoteDomains, remoteRoles, remoteUsers, profile, dataLoading]);
+
+      if (remoteWaves.length > 0 || !dataLoading) {
+          setWaves(prevWaves => {
+              const nextWaves = [...remoteWaves];
+              
+              // Check pending waves
+              Array.from(pendingWaveIds.current).forEach(id => {
+                   const isInRemote = remoteWaves.some(r => r.id === id);
+                   if (isInRemote) {
+                       // It has arrived! Stop tracking.
+                       pendingWaveIds.current.delete(id);
+                   } else {
+                       // Not in remote yet. Keep it from local state.
+                       const localWave = prevWaves.find(w => w.id === id);
+                       if (localWave) {
+                           // Add to top of list if not present
+                           if (!nextWaves.some(n => n.id === id)) {
+                               nextWaves.unshift(localWave);
+                           }
+                       }
+                   }
+              });
+              
+              return nextWaves;
+          });
+      }
+  }, [remoteWaves, remoteDomains, remoteRoles, remoteUsers, profile, dataLoading]); // Add selectedWaveId to dependencies
 
   const selectedWave = waves.find(w => w.id === selectedWaveId);
 
@@ -227,6 +254,7 @@ const App: React.FC = () => {
     };
     
     // Optimistic Update
+    pendingWaveIds.current.add(newWaveId); // Track pending wave
     setWaves([newWave, ...waves]);
     setSelectedWaveId(newWaveId);
     if (!parentId) {
@@ -479,8 +507,25 @@ const App: React.FC = () => {
     await supabase.from('waves').update({ last_activity: Date.now() }).eq('id', selectedWave.id);
   };
 
-  const handleEditBlip = (blipId: string, content: string, newGadgets: Gadget[]) => {
+  const handleEditBlip = async (blipId: string, content: string, newGadgets: Gadget[]) => {
     if (!selectedWave || !currentUser) return;
+
+    // Fetch current state to save version
+    // We rely on local state for speed, but ideally we confirm with DB.
+    // Let's assume the local state `selectedWave` is accurate enough for the "previous version".
+    // Finding the blip in local tree... this is recursive, so a bit tricky.
+    // Or we just fetch from Supabase first to be safe and avoid traversing local tree.
+    const { data: currentBlipData } = await supabase.from('blips').select('*').eq('id', blipId).single();
+
+    if (currentBlipData) {
+        // 1. Save Current Version
+        await supabase.from('blip_versions').insert({
+            blip_id: blipId,
+            content: currentBlipData.content,
+            editor_id: currentBlipData.last_editor_id || currentBlipData.author_id, // Who made *that* version
+            created_at: currentBlipData.last_edited ? new Date(currentBlipData.last_edited).toISOString() : currentBlipData.created_at // Timestamp of *that* version
+        });
+    }
 
     setWaves(prev => prev.map(w => {
       if (w.id === selectedWave.id) {
@@ -499,10 +544,12 @@ const App: React.FC = () => {
 
         // Update Blip
         const mergedGadgets = newGadgets; // Logic simplification for now
+        const now = new Date().toISOString(); // Use ISO string for consistency
+
         supabase.from('blips').update({
             content,
             gadgets: mergedGadgets.length > 0 ? mergedGadgets : null, // merge logic needed?
-            last_edited: Date.now(),
+            last_edited: Date.now(), // DB expects bigint? Schema says bigint.
             last_editor_id: currentUser.id
         }).eq('id', blipId).then(({error}) => {
             if (error) {
@@ -535,10 +582,14 @@ const App: React.FC = () => {
         return;
     }
 
+    // Soft Delete: We update the tree to remove it from view, 
+    // BUT we must ensure Supabase keeps the record with `deleted_at`.
+    // For local state (live view), we remove it so it disappears immediately.
     setWaves(prev => prev.map(w => w.id === selectedWave.id ? { ...w, rootBlip: deleteBlipFromTree(w.rootBlip, blipId) || w.rootBlip } : w));
     
-    // Supabase Delete (Cascade will handle children)
-    supabase.from('blips').delete().eq('id', blipId).then(({error}) => { if(error) console.error(error); });
+    // Supabase Soft Delete
+    const now = new Date().toISOString();
+    supabase.from('blips').update({ deleted_at: now }).eq('id', blipId).then(({error}) => { if(error) console.error(error); });
   };
 
   const handleToggleBlipLock = (blipId: string) => {

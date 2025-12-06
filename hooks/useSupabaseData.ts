@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Wave, Domain, Role, User, Blip, Gadget, ProposalMetadata } from '../types';
+import { Wave, Domain, Role, User, Blip, Gadget, ProposalMetadata, BlipVersion } from '../types';
 import { updateBlipInTree, addChildToBlip, deleteBlipFromTree } from '../utils';
 
 // Helper to convert DB blip to App Blip structure
-const convertDbBlipToAppBlip = (dbBlip: any): Blip => ({
+const convertDbBlipToAppBlip = (dbBlip: any, versions: BlipVersion[] = []): Blip => ({
   id: dbBlip.id,
   authorId: dbBlip.author_id,
   content: dbBlip.content,
@@ -13,16 +13,18 @@ const convertDbBlipToAppBlip = (dbBlip: any): Blip => ({
   lastEditorId: dbBlip.last_editor_id,
   gadgets: dbBlip.gadgets as Gadget[] || undefined,
   isReadOnly: dbBlip.is_read_only,
+  deletedAt: dbBlip.deleted_at ? new Date(dbBlip.deleted_at).getTime() : undefined,
+  versions: versions.filter(v => v.blipId === dbBlip.id),
   children: [] // Children will be populated during tree building
 });
 
 // Helper to build blip tree from flat list
-const buildBlipTree = (flatBlips: any[], rootBlipId: string | null = null): Blip | null => {
+const buildBlipTree = (flatBlips: any[], flatVersions: BlipVersion[], rootBlipId: string | null = null): Blip | null => {
   const blipMap: Record<string, Blip> = {};
   const rootBlips: Blip[] = [];
 
   flatBlips.forEach(dbBlip => {
-    blipMap[dbBlip.id] = convertDbBlipToAppBlip(dbBlip);
+    blipMap[dbBlip.id] = convertDbBlipToAppBlip(dbBlip, flatVersions);
   });
 
   flatBlips.forEach(dbBlip => {
@@ -80,10 +82,22 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
           holderIds: r.holder_ids || [], termEnd: r.term_end
       })) || []);
 
-      // Fetch Waves & all Blips (to reconstruct trees)
+      // Fetch Waves & all Blips (including soft deleted ones for playback)
       const { data: wavesData } = await supabase.from('waves').select('*').order('last_activity', { ascending: false });
       const { data: participantsData } = await supabase.from('wave_participants').select('*');
+      
+      // Note: We intentionally fetch ALL blips, including soft-deleted ones, to support playback
       const { data: blipsData } = await supabase.from('blips').select('*').order('timestamp', { ascending: true });
+      
+      // Fetch Blip Versions
+      const { data: versionsData } = await supabase.from('blip_versions').select('*').order('created_at', { ascending: true });
+      const versions: BlipVersion[] = versionsData?.map((v: any) => ({
+          id: v.id,
+          blipId: v.blip_id,
+          content: v.content,
+          createdAt: new Date(v.created_at).getTime(),
+          editorId: v.editor_id
+      })) || [];
 
       const loadedWaves: Wave[] = [];
       wavesData?.forEach(w => {
@@ -93,7 +107,7 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
           const isRead = myParticipantEntry ? myParticipantEntry.is_read : false;
 
           const waveBlips = blipsData?.filter((b: any) => b.wave_id === w.id) || [];
-          const rootBlip = buildBlipTree(waveBlips);
+          const rootBlip = buildBlipTree(waveBlips, versions);
           
           if (rootBlip) {
               loadedWaves.push({
@@ -211,7 +225,7 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
         });
     });
 
-    // Waves, Blips, Participants - re-fetch strategy
+    // Waves, Blips, Participants, Versions - re-fetch strategy
     subscribeToChannel('public:waves', 'waves', async payload => {
         console.log("Realtime: Wave change detected. Triggering full waves data re-fetch.");
         await fetchData();
@@ -224,6 +238,11 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
         console.log("Realtime: Wave Participant change detected. Triggering full waves data re-fetch.");
         await fetchData();
     });
+    subscribeToChannel('public:blip_versions', 'blip_versions', async payload => {
+        console.log("Realtime: Blip Version change detected. Triggering full waves data re-fetch.");
+        await fetchData();
+    });
+
 
     return () => {
       console.log('Realtime: Unsubscribing from channels.');

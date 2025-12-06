@@ -56,6 +56,14 @@ export interface Gadget {
   };
 }
 
+export interface BlipVersion {
+  id: string;
+  blipId: string;
+  content: string;
+  createdAt: number;
+  editorId?: string;
+}
+
 export interface Blip {
   id: string;
   authorId: string;
@@ -66,6 +74,8 @@ export interface Blip {
   lastEditorId?: string; // NEW: Tracks who actually made the edit
   gadgets?: Gadget[]; // Embedded gadgets
   isReadOnly?: boolean; // NEW: Allows locking a blip
+  deletedAt?: number; // NEW: Soft delete timestamp
+  versions?: BlipVersion[]; // NEW: History of edits
 }
 
 // NEW: Structured data for executing proposals
