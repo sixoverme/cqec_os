@@ -725,18 +725,27 @@ const App: React.FC = () => {
 
   const handleToggleBlipLock = (blipId: string) => {
     if (!selectedWave) return;
+
+    // 1. Find the current state
+    const blip = findBlipInTree(selectedWave.rootBlip, blipId);
+    if (!blip) return;
+
+    const newIsReadOnly = !blip.isReadOnly;
+
+    // 2. Optimistic Update
     setWaves(prev => prev.map(w => w.id === selectedWave.id ? {
         ...w,
-        rootBlip: updateBlipInTree(w.rootBlip, blipId, b => ({ ...b, isReadOnly: !b.isReadOnly }))
+        rootBlip: updateBlipInTree(w.rootBlip, blipId, b => ({ ...b, isReadOnly: newIsReadOnly }))
     } : w));
     
-    // Need to fetch current state to toggle? Or just trust local.
-    // Ideally we toggle local and send explicit value.
-    // Finding the blip in local tree:
-    // (Complex to find deeply nested blip just to get its value, but we assume `updateBlipInTree` worked)
-    // For now, we can't easily get the *new* value without traversing.
-    // Hack: just update in DB with opposite of what we think, or use RPC. 
-    // Let's skip DB sync for lock for now or implement traversal.
+    // 3. DB Sync
+    supabase.from('blips').update({ is_read_only: newIsReadOnly }).eq('id', blipId).then(({ error }) => {
+        if (error) {
+            console.error("Error toggling blip lock:", error);
+            // Ideally revert optimistic update here if needed, 
+            // but the next Realtime sync will likely correct it.
+        }
+    });
   };
 
   const handleAddParticipant = (userId: string) => {
