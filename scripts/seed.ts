@@ -11,7 +11,9 @@ if (fs.existsSync(envPath)) {
     console.log(`Loading env from ${envPath}`);
     const envConfig = dotenv.parse(fs.readFileSync(envPath));
     for (const k in envConfig) {
-        process.env[k] = envConfig[k];
+        if (!process.env[k]) {
+            process.env[k] = envConfig[k];
+        }
     }
 } else {
     console.warn("No .env.local found. Relying on process.env");
