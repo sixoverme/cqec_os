@@ -978,7 +978,71 @@ const App: React.FC = () => {
       setView('wave');
   };
 
+  const handleJoinCircle = async () => {
+      if (!activeDomainId || !currentUser) return;
+      
+      try {
+        const { error } = await supabase.from('domain_members').insert({
+            domain_id: activeDomainId,
+            user_id: currentUser.id
+        });
+        if (error) throw error;
+        // Optimistic update handled by Realtime or re-fetch
+      } catch (e) {
+        console.error("Error joining circle:", e);
+      }
+  };
+
+  const handleLeaveCircle = async () => {
+      if (!activeDomainId || !currentUser) return;
+      const domain = domains.find(d => d.id === activeDomainId);
+      if (!domain?.parentId) {
+          alert("You cannot leave the root circle.");
+          return;
+      }
+
+      try {
+        const { error } = await supabase.from('domain_members').delete()
+            .eq('domain_id', activeDomainId)
+            .eq('user_id', currentUser.id);
+        if (error) throw error;
+      } catch (e) {
+        console.error("Error leaving circle:", e);
+      }
+  };
+
+  const handleLeaveWave = async (waveId: string) => {
+      if (!currentUser) return;
+      const wave = waves.find(w => w.id === waveId);
+      if (!wave) return;
+
+      // Check restriction: Cannot leave wave if member of originating circle
+      // Logic: If wave.domainId exists, check membership.
+      if (wave.domainId) {
+          const isMember = circleMemberships.some(m => m.domainId === wave.domainId && m.userId === currentUser.id);
+          if (isMember) {
+              alert("You are a member of this Circle. To leave this wave, you must leave the Circle.");
+              return;
+          }
+      }
+
+      try {
+          const { error } = await supabase.from('wave_participants').delete()
+            .eq('wave_id', waveId)
+            .eq('user_id', currentUser.id);
+          
+          if (error) throw error;
+          
+          setWaves(prev => prev.filter(w => w.id !== waveId)); // Optimistic remove
+          if (selectedWaveId === waveId) setSelectedWaveId(null);
+
+      } catch (e) {
+          console.error("Error leaving wave:", e);
+      }
+  };
+
   const activeDomain = domains.find(d => d.id === activeDomainId);
+  const isMemberOfActiveDomain = !!(activeDomain && currentUser && circleMemberships.some(m => m.domainId === activeDomain.id && m.userId === currentUser.id));
 
   if (authLoading) {
       return <div className="flex h-screen items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2" /> Loading OS...</div>;
@@ -1058,7 +1122,8 @@ const App: React.FC = () => {
             onExecuteProposal={handleExecuteProposal}
             onTogglePin={() => handleTogglePin(selectedWave.id)}
             onToggleBlipLock={handleToggleBlipLock}
-            onConsentVote={handleConsentVote} // Pass the handler
+            onConsentVote={handleConsentVote} 
+            onLeaveWave={handleLeaveWave} // NEW
           />
         )}
 
@@ -1070,6 +1135,7 @@ const App: React.FC = () => {
              roles={roles.filter(r => r.domainId === activeDomain.id)}
              waves={waves.filter(w => w.domainId === activeDomain.id && w.folder !== 'trash')}
              users={users}
+             isMember={isMemberOfActiveDomain} // NEW
              onSelectWave={setSelectedWaveId}
              onSelectDomain={setActiveDomainId}
              onCreateWave={(type) => {
@@ -1087,6 +1153,8 @@ const App: React.FC = () => {
                  );
              }}
              onDraftProposal={() => setProposalConfig({ isOpen: true, mode: 'operational', parentId: activeDomain.id })}
+             onJoinCircle={handleJoinCircle} // NEW
+             onLeaveCircle={handleLeaveCircle} // NEW
            />
         )}
 

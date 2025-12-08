@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Wave, Domain, Role, User, Blip, Gadget, ProposalMetadata, BlipVersion } from '../types';
+import { Wave, Domain, Role, User, Blip, Gadget, ProposalMetadata, BlipVersion, DomainMember } from '../types';
 import { updateBlipInTree, addChildToBlip, deleteBlipFromTree } from '../utils';
 
 // Helper to convert DB blip to App Blip structure
@@ -47,6 +47,7 @@ const buildBlipTree = (flatBlips: any[], flatVersions: BlipVersion[], rootBlipId
 export const useSupabaseData = (currentUserProfile: User | null) => {
   const [waves, setWaves] = useState<Wave[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [circleMemberships, setCircleMemberships] = useState<DomainMember[]>([]); // NEW
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(true);
@@ -73,6 +74,12 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
       const { data: domainsData } = await supabase.from('domains').select('*');
       setDomains(domainsData?.map((d: any) => ({
           id: d.id, name: d.name, color: d.color, description: d.description, parentId: d.parent_id
+      })) || []);
+
+      // Fetch Domain Memberships (NEW)
+      const { data: membersData } = await supabase.from('domain_members').select('*');
+      setCircleMemberships(membersData?.map((m: any) => ({
+          domainId: m.domain_id, userId: m.user_id
       })) || []);
 
       // Fetch Roles
@@ -204,6 +211,20 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
         });
     });
 
+    // Domain Members (NEW)
+    subscribeToChannel('public:domain_members', 'domain_members', payload => {
+        setCircleMemberships(prev => {
+            const newMembers = [...prev];
+            const m = payload.new || payload.old;
+            if (payload.eventType === 'INSERT') {
+                newMembers.push({ domainId: m.domain_id, userId: m.user_id });
+            } else if (payload.eventType === 'DELETE') {
+                return newMembers.filter(mem => !(mem.domainId === m.domain_id && mem.userId === m.user_id));
+            }
+            return newMembers;
+        });
+    });
+
     // Roles
     subscribeToChannel('public:roles', 'roles', payload => {
         setRoles(prevRoles => {
@@ -250,5 +271,5 @@ export const useSupabaseData = (currentUserProfile: User | null) => {
     };
   }, [currentUserProfile, fetchData]);
 
-  return { waves, domains, roles, users, loading, refresh: fetchData };
+  return { waves, domains, circleMemberships, roles, users, loading, refresh: fetchData };
 };

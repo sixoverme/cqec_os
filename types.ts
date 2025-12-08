@@ -21,6 +21,11 @@ export interface Domain {
   parentId?: string; // NEW: Supports nested circles
 }
 
+export interface DomainMember {
+  domainId: string;
+  userId: string;
+}
+
 // NEW: Role System
 export interface Role {
   id: string;

@@ -31,6 +31,7 @@ interface WaveViewProps {
   onTogglePin: () => void; // NEW: Callback to toggle pin state
   onToggleBlipLock: (blipId: string) => void; // NEW: Toggle lock
   onConsentVote: (blipId: string, gadgetId: string, voteType: 'consent' | 'concern' | 'objection') => void; // NEW: Consent vote
+  onLeaveWave: (waveId: string) => void; // NEW
 }
 
 const WaveView: React.FC<WaveViewProps> = ({ 
@@ -57,7 +58,8 @@ const WaveView: React.FC<WaveViewProps> = ({
   onExecuteProposal,
   onTogglePin,
   onToggleBlipLock,
-  onConsentVote // Destructure here
+  onConsentVote,
+  onLeaveWave // Destructure here
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [playbackMode, setPlaybackMode] = useState(false);
@@ -232,6 +234,13 @@ const WaveView: React.FC<WaveViewProps> = ({
               </button>
               <button onClick={onArchive} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors" title="Archive">
                 <Archive size={20} />
+              </button>
+              <button 
+                  onClick={() => onLeaveWave(wave.id)} 
+                  className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-100 rounded-full transition-colors" 
+                  title="Leave Wave"
+              >
+                <Users size={20} />
               </button>
               <button onClick={onDelete} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="Delete Wave">
                 <Trash2 size={20} />

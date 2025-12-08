@@ -16,10 +16,13 @@ interface CircleDashboardProps {
   roles: Role[];
   waves: Wave[];
   users: Record<string, User>;
+  isMember: boolean; // NEW
   onSelectWave: (waveId: string) => void;
   onSelectDomain: (domainId: string) => void;
   onCreateWave: (type?: Wave['type']) => void;
   onDraftProposal: () => void;
+  onJoinCircle: () => void; // NEW
+  onLeaveCircle: () => void; // NEW
 }
 
 const CircleDashboard: React.FC<CircleDashboardProps> = ({
@@ -29,10 +32,13 @@ const CircleDashboard: React.FC<CircleDashboardProps> = ({
   roles,
   waves,
   users,
+  isMember,
   onSelectWave,
   onSelectDomain,
   onCreateWave,
-  onDraftProposal
+  onDraftProposal,
+  onJoinCircle,
+  onLeaveCircle
 }) => {
   const [isDiscussMenuOpen, setIsDiscussMenuOpen] = useState(false);
 
@@ -78,6 +84,26 @@ const CircleDashboard: React.FC<CircleDashboardProps> = ({
             </div>
             <div className="flex gap-3 relative">
                
+               {/* Join/Leave Circle Actions */}
+               {!isMember && (
+                   <button 
+                     onClick={onJoinCircle}
+                     className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md flex items-center gap-2"
+                   >
+                     <Users size={18} /> Join Circle
+                   </button>
+               )}
+
+               {isMember && parentDomain && (
+                   <button 
+                     onClick={onLeaveCircle}
+                     className="px-4 py-2 bg-white border border-slate-300 text-slate-500 font-medium rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-sm flex items-center gap-2 transition-colors"
+                     title="Leave this circle"
+                   >
+                     <Users size={18} /> Leave
+                   </button>
+               )}
+
                {/* Discuss Button Logic */}
                {!hasCircleHome ? (
                   <div className="relative">
