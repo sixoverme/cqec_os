@@ -66,60 +66,24 @@ const Blip: React.FC<BlipProps> = ({
 
   // 4. Determine content to show based on version history
   let displayContent = blip.content;
-  if (playbackTime !== undefined && playbackTime !== null && blip.versions && blip.versions.length > 0) {
-    // Find the latest version that existed at playbackTime
-    // Versions are sorted by createdAt ascending (from hook), or we sort here to be safe.
-    const pastVersions = blip.versions.filter(v => v.createdAt <= playbackTime);
-    
-    if (pastVersions.length > 0) {
-        // The last one in the list is the most recent valid version for this time
-        // However, if the main blip was edited *after* the last version we have, 
-        // we check if the main content is older than playbackTime.
-        // Actually, the standard pattern is: versions store OLD content. The main row stores CURRENT content.
-        // So we look for the latest version that is BEFORE playbackTime.
-        
-        // Wait, "versions store history". Usually that means every edit creates a version.
-        // If we just save a snapshot on edit, we need to find the version that covers this timestamp.
-        
-        // Let's assume:
-        // T0: Created "A" (No version row, just Blip row)
-        // T1: Edit to "B" -> Create Version "A" at T1. Blip becomes "B".
-        // T2: Edit to "C" -> Create Version "B" at T2. Blip becomes "C".
-        
-        // Playback at T0.5: Should show "A".
-        // We see Version A (created T1) is AFTER T0.5. 
-        // If NO version is <= playbackTime, but blip.timestamp <= playbackTime, it means it was the original content.
-        // But we don't store original content if we overwrite it!
-        // Ah, the classic "overwrite" problem.
-        
-        // FIX: The `blip_versions` table should store the *snapshot of what it became*, or we need to store the *original* on creation?
-        // Better pattern for this app: When editing, we save the *current state* to history before updating.
-        // So:
-        // T0: Created "A".
-        // T1: Edit to "B". We save ("A", T1) to versions. Update Blip to "B".
-        // T2: Edit to "C". We save ("B", T2) to versions. Update Blip to "C".
-        
-        // Playback at T0.5:
-        // Versions: ("A", T1), ("B", T2).
-        // Filter versions <= T0.5? None.
-        // If no versions <= T0.5, what do we show?
-        // We need to find the version that was active *until* the next version.
-        // The version with the *smallest* createdAt that is *greater* than playbackTime holds the content that was overwritten at that time.
-        // So ("A", T1) means "A" was valid until T1.
-        
-        // Let's sort versions by createdAt ascending.
-        const sortedVersions = [...blip.versions].sort((a, b) => a.createdAt - b.createdAt);
-        
-        // Find the first version that was created AFTER playbackTime.
-        // This version represents the state *before* that edit.
-        const nextVersion = sortedVersions.find(v => v.createdAt > playbackTime);
-        
-        if (nextVersion) {
-            displayContent = nextVersion.content;
-        } else {
-            // If all versions are before playbackTime, then the current live content is the correct one.
-            displayContent = blip.content;
-        }
+  if (playbackTime !== undefined && playbackTime !== null) {
+    // Determine when the current live content became active
+    const currentContentStart = blip.lastEdited || blip.timestamp;
+
+    // If playback is viewing a time BEFORE the current content existed, check history
+    if (playbackTime < currentContentStart && blip.versions && blip.versions.length > 0) {
+      // Find all versions that started on or before the playback time
+      // Versions are already sorted by createdAt ascending from the hook
+      const pastVersions = blip.versions.filter(v => v.createdAt <= playbackTime);
+      
+      if (pastVersions.length > 0) {
+        // The last valid version in the timeline is the one active at this moment
+        displayContent = pastVersions[pastVersions.length - 1].content;
+      }
+      // If pastVersions is empty, it implies we are at a time before the first recorded version.
+      // Ideally this shouldn't happen if history is complete (starting at T0).
+      // If it does, falling back to `blip.content` is the only safe default, 
+      // though it might show future content.
     }
   }
   // --- End Playback Logic ---
