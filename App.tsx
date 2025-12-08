@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Wave, AppState, Blip, Gadget, RemoteCursor, User, Domain, Role, ProposalMetadata } from './types';
+import { Wave, AppState, Blip, Gadget, RemoteCursor, User, Domain, Role, ProposalMetadata, DomainMember } from './types';
 import { updateBlipInTree, addChildToBlip, deleteBlipFromTree, generateId, findBlipInTree } from './utils';
 import WaveList from './components/WaveList';
 import WaveView from './components/WaveView';
@@ -87,10 +87,11 @@ const Login: React.FC = () => {
 
 const App: React.FC = () => {
   const { profile, loading: authLoading } = useAuth();
-  const { waves: remoteWaves, domains: remoteDomains, roles: remoteRoles, users: remoteUsers, loading: dataLoading, refresh } = useSupabaseData(profile);
+  const { waves: remoteWaves, domains: remoteDomains, circleMemberships: remoteCircleMemberships, roles: remoteRoles, users: remoteUsers, loading: dataLoading, refresh } = useSupabaseData(profile);
 
   const [waves, setWaves] = useState<Wave[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [circleMemberships, setCircleMemberships] = useState<DomainMember[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
   
@@ -126,6 +127,7 @@ const App: React.FC = () => {
   // Sync Remote Data to Local State
   useEffect(() => {
       if (remoteDomains.length > 0 || !dataLoading) setDomains(remoteDomains);
+      if (remoteCircleMemberships.length > 0 || !dataLoading) setCircleMemberships(remoteCircleMemberships);
       if (remoteRoles.length > 0 || !dataLoading) setRoles(remoteRoles);
       if (Object.keys(remoteUsers).length > 0 || !dataLoading) setUsers(remoteUsers);
       if (profile) setCurrentUser(profile);
