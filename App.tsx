@@ -7,7 +7,6 @@ import ProfileView from './components/ProfileView';
 import UserDirectory from './components/UserDirectory';
 import ProposalModal, { ProposalData } from './components/ProposalModal';
 import CircleDashboard from './components/CircleDashboard';
-import { DevSeeder } from './components/DevSeeder';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useSupabaseData } from './hooks/useSupabaseData';
@@ -1080,7 +1079,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-gray-100 overflow-hidden">
-      <DevSeeder />
       
       {proposalConfig.isOpen && (
           <ProposalModal 
