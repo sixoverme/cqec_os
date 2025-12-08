@@ -325,6 +325,13 @@ const App: React.FC = () => {
         }
     }
 
+    // Auto-add circle members if creating a wave in a domain
+    const targetDomainId = initialData?.domainId || activeDomainId;
+    if (targetDomainId) {
+        const domainMembers = circleMemberships.filter(m => m.domainId === targetDomainId).map(m => m.userId);
+        participants = [...new Set([...participants, ...domainMembers])];
+    }
+
     let title = initialData?.title || 'New Wave';
     let initialContent = initialData?.content || '';
     let initialGadgets: Gadget[] | undefined = undefined;
@@ -983,13 +990,19 @@ const App: React.FC = () => {
   const handleJoinCircle = async () => {
       if (!activeDomainId || !currentUser) return;
       
+      // Optimistic Update
+      setCircleMemberships(prev => [...prev, { domainId: activeDomainId, userId: currentUser.id }]);
+
       try {
         const { error } = await supabase.from('domain_members').insert({
             domain_id: activeDomainId,
             user_id: currentUser.id
         });
-        if (error) throw error;
-        // Optimistic update handled by Realtime or re-fetch
+        if (error) {
+            // Revert if error
+             setCircleMemberships(prev => prev.filter(m => !(m.domainId === activeDomainId && m.userId === currentUser.id)));
+             throw error;
+        }
       } catch (e) {
         console.error("Error joining circle:", e);
       }
@@ -1003,11 +1016,18 @@ const App: React.FC = () => {
           return;
       }
 
+      // Optimistic Update
+      setCircleMemberships(prev => prev.filter(m => !(m.domainId === activeDomainId && m.userId === currentUser.id)));
+
       try {
         const { error } = await supabase.from('domain_members').delete()
             .eq('domain_id', activeDomainId)
             .eq('user_id', currentUser.id);
-        if (error) throw error;
+        if (error) {
+             // Revert if error
+             setCircleMemberships(prev => [...prev, { domainId: activeDomainId, userId: currentUser.id }]);
+             throw error;
+        }
       } catch (e) {
         console.error("Error leaving circle:", e);
       }
@@ -1138,6 +1158,7 @@ const App: React.FC = () => {
              waves={waves.filter(w => w.domainId === activeDomain.id && w.folder !== 'trash')}
              users={users}
              isMember={isMemberOfActiveDomain} // NEW
+             memberIds={circleMemberships.filter(m => m.domainId === activeDomain.id).map(m => m.userId)} // NEW
              onSelectWave={setSelectedWaveId}
              onSelectDomain={setActiveDomainId}
              onCreateWave={(type) => {

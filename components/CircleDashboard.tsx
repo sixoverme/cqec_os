@@ -17,6 +17,7 @@ interface CircleDashboardProps {
   waves: Wave[];
   users: Record<string, User>;
   isMember: boolean; // NEW
+  memberIds: string[]; // NEW
   onSelectWave: (waveId: string) => void;
   onSelectDomain: (domainId: string) => void;
   onCreateWave: (type?: Wave['type']) => void;
@@ -33,6 +34,7 @@ const CircleDashboard: React.FC<CircleDashboardProps> = ({
   waves,
   users,
   isMember,
+  memberIds,
   onSelectWave,
   onSelectDomain,
   onCreateWave,
@@ -167,6 +169,30 @@ const CircleDashboard: React.FC<CircleDashboardProps> = ({
           {/* Left Column: Governance & Structure */}
           <div className="space-y-6">
             
+             {/* Members Card */}
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-blue-50/50">
+                 <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                   <Users size={18} className="text-blue-500" />
+                   Members <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{memberIds.length}</span>
+                 </h3>
+              </div>
+              <div className="p-3">
+                 <div className="flex flex-wrap gap-2">
+                    {memberIds.map(uid => (
+                        users[uid] ? (
+                            <div key={uid} className="relative group cursor-help">
+                                <Avatar user={users[uid]} size="md" />
+                            </div>
+                        ) : null
+                    ))}
+                    {memberIds.length === 0 && (
+                        <div className="text-sm text-slate-400 italic w-full text-center py-2">No members yet.</div>
+                    )}
+                 </div>
+              </div>
+            </div>
+
             {/* Roles Card */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50">
