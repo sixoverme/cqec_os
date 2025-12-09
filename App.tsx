@@ -1113,6 +1113,7 @@ const App: React.FC = () => {
           onSearch={setSearchQuery}
           onOpenDirectory={() => { setView('directory'); if(window.innerWidth < 768) setSidebarOpen(false); }}
           onOpenProfile={() => handleOpenProfile(activeUser.id)}
+          onToggleSidebar={setSidebarOpen} // NEW PROP
         />
       </div>
 

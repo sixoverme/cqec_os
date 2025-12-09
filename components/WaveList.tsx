@@ -39,6 +39,7 @@ interface WaveListProps {
   onSearch: (query: string) => void;
   onOpenDirectory: () => void;
   onOpenProfile: () => void;
+  onToggleSidebar: (isOpen: boolean) => void;
 }
 
 const WaveList: React.FC<WaveListProps> = ({ 
@@ -58,7 +59,8 @@ const WaveList: React.FC<WaveListProps> = ({
   onProposeCircle,
   onSearch,
   onOpenDirectory,
-  onOpenProfile
+  onOpenProfile,
+  onToggleSidebar
 }) => {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [isMyceliumOpen, setIsMyceliumOpen] = useState(true);
@@ -251,6 +253,14 @@ const WaveList: React.FC<WaveListProps> = ({
                  </div>
                  <h1 className="text-lg font-bold text-slate-800 tracking-tight">CQEC OS</h1>
              </div>
+             {/* Close Sidebar button for mobile */}
+             <button 
+                onClick={() => onToggleSidebar(false)} 
+                className="md:hidden p-2 hover:bg-slate-100 rounded-full text-slate-500"
+                title="Close Sidebar"
+             >
+                <X size={18} />
+             </button>
              <button onClick={onOpenDirectory} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
                 <Users size={18} />
              </button>
